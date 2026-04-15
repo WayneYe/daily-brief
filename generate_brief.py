@@ -16,6 +16,7 @@ import requests
 import feedparser
 from bs4 import BeautifulSoup
 from groq import Groq
+import markdown as md_lib
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -321,3 +322,301 @@ def format_markdown(stories: list[Story], date: datetime, issue_number: int) -> 
             lines.append(f"*Source: [{s.source.upper()}]({s.url})*")
             lines.append("")
     return "\n".join(lines)
+
+
+@dataclass
+class BriefMeta:
+    date: datetime
+    date_str: str          # "2026-04-14"
+    issue_number: int
+    word_count: int
+    mp3_url: str           # empty string if TTS failed
+    md_url: str            # link to raw .md on GitHub
+    html_content: str      # rendered HTML of the brief
+
+
+def generate_index_html(briefs: list[BriefMeta]) -> str:
+    """Generate the full GitHub Pages index.html from all briefs, newest first."""
+    briefs_sorted = sorted(briefs, key=lambda b: (b.date, b.issue_number), reverse=True)
+
+    rows = []
+    for i, b in enumerate(briefs_sorted):
+        date_display = b.date.strftime("%B %-d, %Y")
+        read_min = max(1, b.word_count // 200)
+        play_btn = (
+            f'<button class="btn btn-play" onclick="toggleAudio(this, \'{b.mp3_url}\')" aria-label="Play audio">▶ Play</button>'
+            if b.mp3_url else ""
+        )
+        expanded = "expanded" if i == 0 else ""
+        rows.append(f"""
+        <tr class="brief-row {expanded}" data-index="{i}">
+          <td class="col-date">{date_display}</td>
+          <td class="col-issue">#{b.issue_number:03d}</td>
+          <td class="col-tags">
+            <span class="tag tag-ai">AI</span>
+            <span class="tag tag-dev">Dev</span>
+            <span class="tag tag-tech">Tech</span>
+          </td>
+          <td class="col-time">~{read_min} min read</td>
+          <td class="col-actions">
+            <a class="btn btn-read" href="{b.md_url}" target="_blank">📄 Read</a>
+            {play_btn}
+          </td>
+        </tr>
+        <tr class="brief-content {expanded}" id="content-{i}">
+          <td colspan="5">
+            <div class="audio-player" id="audio-{i}"></div>
+            <div class="brief-body">{b.html_content}</div>
+          </td>
+        </tr>""")
+
+    rows_html = "\n".join(rows)
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Daily Brief</title>
+  <style>
+    :root {{
+      --bg: #ffffff; --bg2: #f6f8fa; --border: #d0d7de; --text: #1f2328;
+      --text-muted: #636c76; --accent: #0969da;
+      --tag-ai-bg: #ddf4ff; --tag-ai-text: #0550ae;
+      --tag-dev-bg: #d1f0db; --tag-dev-text: #1a7f37;
+      --tag-tech-bg: #fff0b3; --tag-tech-text: #7d4e00;
+      --btn-play-bg: #0969da; --btn-play-text: #ffffff;
+    }}
+    @media (prefers-color-scheme: dark) {{
+      :root {{
+        --bg: #0d1117; --bg2: #161b22; --border: #30363d; --text: #e6edf3;
+        --text-muted: #7d8590; --accent: #58a6ff;
+        --tag-ai-bg: #0c2d6b; --tag-ai-text: #79c0ff;
+        --tag-dev-bg: #0c3322; --tag-dev-text: #56d364;
+        --tag-tech-bg: #3d2b00; --tag-tech-text: #e3b341;
+        --btn-play-bg: #1f6feb; --btn-play-text: #ffffff;
+      }}
+    }}
+    [data-theme="light"] {{
+      --bg: #ffffff; --bg2: #f6f8fa; --border: #d0d7de; --text: #1f2328;
+      --text-muted: #636c76; --accent: #0969da;
+      --tag-ai-bg: #ddf4ff; --tag-ai-text: #0550ae;
+      --tag-dev-bg: #d1f0db; --tag-dev-text: #1a7f37;
+      --tag-tech-bg: #fff0b3; --tag-tech-text: #7d4e00;
+      --btn-play-bg: #0969da; --btn-play-text: #ffffff;
+    }}
+    [data-theme="dark"] {{
+      --bg: #0d1117; --bg2: #161b22; --border: #30363d; --text: #e6edf3;
+      --text-muted: #7d8590; --accent: #58a6ff;
+      --tag-ai-bg: #0c2d6b; --tag-ai-text: #79c0ff;
+      --tag-dev-bg: #0c3322; --tag-dev-text: #56d364;
+      --tag-tech-bg: #3d2b00; --tag-tech-text: #e3b341;
+      --btn-play-bg: #1f6feb; --btn-play-text: #ffffff;
+    }}
+    *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
+    body {{ background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 15px; line-height: 1.6; }}
+    header {{ background: var(--bg2); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 10; }}
+    header h1 {{ font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }}
+    header .subtitle {{ font-size: 12px; color: var(--text-muted); font-family: "SFMono-Regular", Consolas, monospace; }}
+    .theme-toggle {{ background: none; border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 16px; color: var(--text); }}
+    main {{ max-width: 960px; margin: 0 auto; padding: 24px 16px; }}
+    table {{ width: 100%; border-collapse: collapse; }}
+    th {{ text-align: left; font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; padding: 8px 12px; border-bottom: 1px solid var(--border); }}
+    td {{ padding: 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }}
+    .brief-row:hover td {{ background: var(--bg2); cursor: pointer; }}
+    .brief-row.expanded td {{ background: var(--bg2); }}
+    .col-date {{ font-weight: 600; white-space: nowrap; }}
+    .col-issue {{ font-family: monospace; color: var(--text-muted); white-space: nowrap; }}
+    .col-time {{ color: var(--text-muted); font-size: 13px; white-space: nowrap; }}
+    .col-actions {{ white-space: nowrap; }}
+    .tag {{ display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; margin-right: 4px; }}
+    .tag-ai {{ background: var(--tag-ai-bg); color: var(--tag-ai-text); }}
+    .tag-dev {{ background: var(--tag-dev-bg); color: var(--tag-dev-text); }}
+    .tag-tech {{ background: var(--tag-tech-bg); color: var(--tag-tech-text); }}
+    .btn {{ display: inline-block; padding: 5px 12px; border-radius: 6px; font-size: 13px; font-weight: 500; text-decoration: none; border: 1px solid var(--border); cursor: pointer; margin-right: 6px; color: var(--text); background: var(--bg); }}
+    .btn:hover {{ background: var(--bg2); }}
+    .btn-play {{ background: var(--btn-play-bg); color: var(--btn-play-text); border-color: transparent; }}
+    .btn-play:hover {{ opacity: 0.88; }}
+    .brief-content {{ display: none; }}
+    .brief-content.expanded {{ display: table-row; }}
+    .brief-body {{ padding: 16px; max-width: 720px; }}
+    .brief-body h1 {{ font-size: 20px; margin-bottom: 16px; }}
+    .brief-body h2 {{ font-size: 16px; margin: 20px 0 8px; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 4px; }}
+    .brief-body h3 {{ font-size: 14px; margin: 12px 0 4px; }}
+    .brief-body p {{ margin-bottom: 10px; color: var(--text); }}
+    .brief-body a {{ color: var(--accent); }}
+    .brief-body em {{ color: var(--text-muted); font-size: 12px; }}
+    .audio-player {{ padding: 12px 16px 0; }}
+    .audio-player audio {{ width: 100%; max-width: 480px; }}
+    footer {{ text-align: center; padding: 32px 16px; color: var(--text-muted); font-size: 13px; border-top: 1px solid var(--border); margin-top: 32px; }}
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Daily Brief</h1>
+      <div class="subtitle">$ ./daily_brief.sh &mdash; automated &middot; curated &middot; daily</div>
+    </div>
+    <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">&#127769;</button>
+  </header>
+  <main>
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th><th>Issue</th><th>Topics</th><th>Length</th><th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows_html}
+      </tbody>
+    </table>
+  </main>
+  <footer>Automated daily tech briefing &middot; AI &middot; Dev &middot; Security &middot; Open Source</footer>
+  <script>
+    (function() {{
+      const saved = localStorage.getItem('theme');
+      if (saved) document.documentElement.setAttribute('data-theme', saved);
+      updateToggleIcon();
+    }})();
+    function toggleTheme() {{
+      const current = document.documentElement.getAttribute('data-theme');
+      const isDark = current === 'dark' || (!current && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      const next = isDark ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('theme', next);
+      updateToggleIcon();
+    }}
+    function updateToggleIcon() {{
+      const current = document.documentElement.getAttribute('data-theme');
+      const isDark = current === 'dark' || (!current && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      document.getElementById('theme-toggle').textContent = isDark ? '\u2600\ufe0f' : '\ud83c\udf19';
+    }}
+    document.querySelectorAll('.brief-row').forEach(function(row) {{
+      row.addEventListener('click', function(e) {{
+        if (e.target.tagName === 'A' || e.target.tagName === 'BUTTON') return;
+        const idx = this.dataset.index;
+        const content = document.getElementById('content-' + idx);
+        const isExpanded = content.classList.contains('expanded');
+        document.querySelectorAll('.brief-content').forEach(function(c) {{ c.classList.remove('expanded'); }});
+        document.querySelectorAll('.brief-row').forEach(function(r) {{ r.classList.remove('expanded'); }});
+        if (!isExpanded) {{ content.classList.add('expanded'); this.classList.add('expanded'); }}
+      }});
+    }});
+    let currentAudio = null;
+    function toggleAudio(btn, url) {{
+      if (currentAudio && !currentAudio.paused) {{
+        currentAudio.pause();
+        if (currentAudio.dataset.url === url) {{ currentAudio = null; btn.textContent = '\\u25b6 Play'; return; }}
+      }}
+      const row = btn.closest('tr');
+      const idx = row.dataset.index;
+      const container = document.getElementById('content-' + idx);
+      const audioDiv = document.getElementById('audio-' + idx);
+      if (!container.classList.contains('expanded')) {{
+        document.querySelectorAll('.brief-content').forEach(function(c) {{ c.classList.remove('expanded'); }});
+        document.querySelectorAll('.brief-row').forEach(function(r) {{ r.classList.remove('expanded'); }});
+        container.classList.add('expanded');
+        row.classList.add('expanded');
+      }}
+      let audio = audioDiv.querySelector('audio');
+      if (!audio) {{
+        audio = document.createElement('audio');
+        audio.controls = true;
+        audio.src = url;
+        audio.dataset.url = url;
+        audioDiv.appendChild(audio);
+      }}
+      audio.play();
+      currentAudio = audio;
+      btn.textContent = '\u23f8 Pause';
+      audio.onended = function() {{ btn.textContent = '\\u25b6 Play'; }};
+    }}
+  </script>
+</body>
+</html>"""
+
+
+def _strip_markdown(text: str) -> str:
+    """Strip Markdown syntax for clean TTS input."""
+    text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
+    text = re.sub(r"\*{1,2}(.+?)\*{1,2}", r"\1", text)
+    text = re.sub(r"\[(.+?)\]\(.+?\)", r"\1", text)
+    text = re.sub(r"`{1,3}.+?`{1,3}", "", text)
+    text = re.sub(r"^>\s+", "", text, flags=re.MULTILINE)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def generate_mp3(markdown_text: str, output_path: Path) -> bool:
+    """Generate MP3 from brief text using Kokoro TTS. Returns True on success."""
+    try:
+        import kokoro
+        import soundfile as sf
+        import numpy as np
+        from pydub import AudioSegment
+
+        plain_text = _strip_markdown(markdown_text)
+        pipeline = kokoro.KPipeline(lang_code="a")  # American English
+
+        wav_path = output_path.with_suffix(".wav")
+        samples = []
+        sample_rate = 24000
+
+        for _, _, audio in pipeline(plain_text, voice="af_heart", speed=1.0):
+            samples.append(audio)
+
+        if not samples:
+            log.warning("Kokoro produced no audio samples")
+            return False
+
+        combined = np.concatenate(samples)
+        sf.write(str(wav_path), combined, sample_rate)
+        AudioSegment.from_wav(str(wav_path)).export(str(output_path), format="mp3", bitrate="128k")
+        wav_path.unlink(missing_ok=True)
+        log.info(f"MP3 generated: {output_path}")
+        return True
+    except Exception as e:
+        log.warning(f"TTS generation failed: {e}")
+        return False
+
+
+def create_github_release(
+    repo: str,
+    tag: str,
+    title: str,
+    mp3_path: Path,
+    token: str,
+) -> str:
+    """Create a GitHub Release and upload the MP3. Returns the asset download URL."""
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    release_resp = requests.post(
+        f"https://api.github.com/repos/{repo}/releases",
+        headers=headers,
+        json={
+            "tag_name": tag,
+            "name": title,
+            "body": f"Automated daily brief for {tag}.",
+            "draft": False,
+            "prerelease": False,
+        },
+        timeout=15,
+    )
+    release_resp.raise_for_status()
+    upload_url = release_resp.json()["upload_url"].replace("{?name,label}", "")
+
+    with open(mp3_path, "rb") as f:
+        upload_resp = requests.post(
+            upload_url,
+            headers={**headers, "Content-Type": "audio/mpeg"},
+            params={"name": "daily-brief.mp3"},
+            data=f,
+            timeout=120,
+        )
+    upload_resp.raise_for_status()
+    asset_url = upload_resp.json()["browser_download_url"]
+    log.info(f"MP3 uploaded to GitHub Release: {asset_url}")
+    return asset_url
