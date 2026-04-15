@@ -5,3 +5,8 @@ uv.lock
 *.wav
 *.mp3
 .env
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.devassist-plugins.lock.json
