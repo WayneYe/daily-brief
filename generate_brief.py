@@ -15,6 +15,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
 import feedparser
 from bs4 import BeautifulSoup
+from groq import Groq
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -217,3 +218,62 @@ def deduplicate(stories: list[Story]) -> list[Story]:
 def rank_and_select(stories: list[Story], n: int = 12) -> list[Story]:
     """Sort by score descending and return top n."""
     return sorted(stories, key=lambda s: s.score, reverse=True)[:n]
+
+
+SECTION_KEYWORDS = {
+    "ai": ["llm", "gpt", "claude", "gemini", "ai", "model", "agent", "ml", "neural", "openai", "anthropic", "mistral", "llama"],
+    "dev": ["python", "rust", "golang", "java", "typescript", "javascript", "framework", "library", "github", "open source", "release", "uv", "npm", "cargo"],
+    "tech": ["security", "cloud", "kubernetes", "aws", "startup", "funding", "hardware", "chip", "quantum", "browser", "linux"],
+}
+
+def _guess_section(title: str, text: str) -> str:
+    combined = (title + " " + text).lower()
+    scores = {s: sum(combined.count(kw) for kw in kws) for s, kws in SECTION_KEYWORDS.items()}
+    best = max(scores, key=scores.get)
+    return best if scores[best] > 0 else "hits"
+
+
+SUMMARIZE_PROMPT = """\
+You are a tech news editor writing a concise daily brief.
+
+Given the story title and snippet below, write a JSON response with:
+- "summary": 3-5 sentence summary in plain English. Include key facts, numbers, and why it matters.
+- "section": one of "ai", "dev", "tech", or "hits"
+  - "ai" = AI, LLMs, models, agents, ML
+  - "dev" = programming languages, tools, frameworks, open source
+  - "tech" = general software/internet/hardware/security/startups
+  - "hits" = anything else interesting
+
+Respond ONLY with valid JSON, no markdown fences.
+
+Title: {title}
+Snippet: {text}
+"""
+
+def summarize_and_categorize(stories: list[Story], api_key: str) -> list[Story]:
+    """Call Groq API to summarize each story and assign a section."""
+    client = Groq(api_key=api_key)
+    for story in stories:
+        try:
+            resp = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": SUMMARIZE_PROMPT.format(
+                    title=story.title, text=story.text[:800]
+                )}],
+                temperature=0.3,
+                max_tokens=300,
+            )
+            raw = resp.choices[0].message.content.strip()
+            data = json.loads(raw)
+            story.summary = data.get("summary") or story.text[:300]
+            section = data.get("section", "")
+            story.section = section if section in SECTION_KEYWORDS or section == "hits" else _guess_section(story.title, story.text)
+        except json.JSONDecodeError:
+            log.warning(f"JSON parse error for story: {story.title}")
+            story.summary = story.text[:300]
+            story.section = _guess_section(story.title, story.text)
+        except Exception as e:
+            log.warning(f"Groq API error for '{story.title}': {e}")
+            story.summary = story.text[:300]
+            story.section = _guess_section(story.title, story.text)
+    return stories
