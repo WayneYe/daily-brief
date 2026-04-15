@@ -1,0 +1,24 @@
+[project]
+name = "daily-brief"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "feedparser>=6.0",
+    "beautifulsoup4>=4.12",
+    "requests>=2.31",
+    "groq>=0.9",
+    "kokoro>=0.9",
+    "soundfile>=0.12",
+    "pydub>=0.25",
+    "markdown>=3.5",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-mock>=3.12",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

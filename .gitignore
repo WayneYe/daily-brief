@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.venv/
+uv.lock
+*.wav
+*.mp3
+.env
