@@ -277,3 +277,47 @@ def summarize_and_categorize(stories: list[Story], api_key: str) -> list[Story]:
             story.summary = story.text[:300]
             story.section = _guess_section(story.title, story.text)
     return stories
+
+
+SECTION_LABELS = {
+    "ai":   ("01", "AI / LLM / Agents"),
+    "dev":  ("02", "Dev Tooling & Languages"),
+    "tech": ("03", "Software & Internet Tech"),
+    "hits": ("04", "Quick Hits"),
+}
+
+def get_next_issue_number(count_file: Path) -> int:
+    """Read, increment, and persist the issue counter."""
+    n = int(count_file.read_text().strip()) + 1 if count_file.exists() else 1
+    count_file.write_text(f"{n}\n")
+    return n
+
+
+def _estimate_read_time(text: str) -> int:
+    """Estimate reading time in minutes (avg 200 wpm)."""
+    return max(1, len(text.split()) // 200)
+
+
+def format_markdown(stories: list[Story], date: datetime, issue_number: int) -> str:
+    date_str = date.strftime("%B %-d, %Y")
+    lines = [
+        f"# Daily Brief — {date_str}  //  Issue #{issue_number:03d}",
+        "",
+        "> Automated daily tech briefing covering AI, dev tooling, and software news.",
+        "",
+    ]
+    for section_key in ("ai", "dev", "tech", "hits"):
+        num, label = SECTION_LABELS[section_key]
+        section_stories = [s for s in stories if s.section == section_key]
+        if not section_stories:
+            continue
+        lines.append(f"## {num} {label}")
+        lines.append("")
+        for s in section_stories:
+            lines.append(f"### {s.title}")
+            lines.append("")
+            lines.append(s.summary)
+            lines.append("")
+            lines.append(f"*Source: [{s.source.upper()}]({s.url})*")
+            lines.append("")
+    return "\n".join(lines)
