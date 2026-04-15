@@ -179,3 +179,41 @@ def fetch_rss() -> list[Story]:
         except Exception as e:
             log.warning(f"RSS feed {url} failed: {e}")
     return stories
+
+
+def _title_words(title: str) -> frozenset[str]:
+    """Normalize title to a set of significant words for fuzzy dedup."""
+    stopwords = {"a", "an", "the", "and", "or", "of", "to", "in", "is", "for", "with"}
+    words = re.sub(r"[^a-z0-9 ]", "", title.lower()).split()
+    return frozenset(w for w in words if w not in stopwords)
+
+
+def _titles_are_similar(a: frozenset[str], b: frozenset[str]) -> bool:
+    """Return True if titles share enough words to be considered duplicates."""
+    if not a or not b:
+        return False
+    intersection = len(a & b)
+    shorter = min(len(a), len(b))
+    return intersection >= max(2, shorter * 0.7)
+
+
+def deduplicate(stories: list[Story]) -> list[Story]:
+    """Remove duplicate stories by URL and near-duplicate titles."""
+    seen_urls: set[str] = set()
+    seen_title_word_sets: list[frozenset[str]] = []
+    result = []
+    for s in stories:
+        if s.url in seen_urls:
+            continue
+        twords = _title_words(s.title)
+        if any(_titles_are_similar(twords, seen) for seen in seen_title_word_sets):
+            continue
+        seen_urls.add(s.url)
+        seen_title_word_sets.append(twords)
+        result.append(s)
+    return result
+
+
+def rank_and_select(stories: list[Story], n: int = 12) -> list[Story]:
+    """Sort by score descending and return top n."""
+    return sorted(stories, key=lambda s: s.score, reverse=True)[:n]

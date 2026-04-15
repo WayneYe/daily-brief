@@ -136,3 +136,41 @@ def test_fetch_rss_returns_empty_on_error():
 
 # Import the other functions needed by later tasks
 from generate_brief import fetch_reddit, fetch_github_trending, fetch_rss
+
+from generate_brief import deduplicate, rank_and_select
+
+def _make_story(title, url, score=0.5, source="hn"):
+    return Story(
+        title=title, url=url, source=source, score=score,
+        published_at=datetime.now(timezone.utc), text=title,
+    )
+
+def test_deduplicate_removes_exact_url_duplicates():
+    stories = [
+        _make_story("Rust 2.0 released", "https://blog.rust-lang.org/2.0"),
+        _make_story("Rust 2.0 released", "https://blog.rust-lang.org/2.0"),
+    ]
+    result = deduplicate(stories)
+    assert len(result) == 1
+
+def test_deduplicate_removes_similar_titles():
+    stories = [
+        _make_story("OpenAI releases GPT-5", "https://openai.com/gpt5"),
+        _make_story("OpenAI Releases GPT-5 Model", "https://techcrunch.com/gpt5"),
+    ]
+    result = deduplicate(stories)
+    assert len(result) == 1
+
+def test_deduplicate_keeps_distinct_stories():
+    stories = [
+        _make_story("Rust 2.0 released", "https://rust-lang.org"),
+        _make_story("Python 4.0 released", "https://python.org"),
+    ]
+    result = deduplicate(stories)
+    assert len(result) == 2
+
+def test_rank_and_select_returns_top_n():
+    stories = [_make_story(f"Story {i}", f"https://ex.com/{i}", score=i/10) for i in range(20)]
+    result = rank_and_select(stories, n=10)
+    assert len(result) == 10
+    assert result[0].score >= result[-1].score
