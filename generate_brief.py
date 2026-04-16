@@ -620,3 +620,116 @@ def create_github_release(
     asset_url = upload_resp.json()["browser_download_url"]
     log.info(f"MP3 uploaded to GitHub Release: {asset_url}")
     return asset_url
+
+
+def collect_existing_briefs(briefs_dir: Path, repo: str) -> list[BriefMeta]:
+    """Walk briefs/*/daily-brief.md and reconstruct BriefMeta for each."""
+    metas = []
+    for md_path in sorted(briefs_dir.glob("*/daily-brief.md")):
+        date_str = md_path.parent.name  # "04-14-2026"
+        try:
+            date = datetime.strptime(date_str, "%m-%d-%Y").replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+        content = md_path.read_text()
+        m = re.search(r"Issue #(\d+)", content)
+        issue = int(m.group(1)) if m else 0
+        word_count = len(content.split())
+        tag = date.strftime("%Y-%m-%d")
+        md_url = f"https://github.com/{repo}/blob/main/briefs/{date_str}/daily-brief.md"
+        mp3_url = f"https://github.com/{repo}/releases/download/{tag}/daily-brief.mp3"
+        html_content = md_lib.markdown(content)
+        metas.append(BriefMeta(
+            date=date,
+            date_str=date_str,
+            issue_number=issue,
+            word_count=word_count,
+            mp3_url=mp3_url,
+            md_url=md_url,
+            html_content=html_content,
+        ))
+    return metas
+
+
+def main():
+    groq_api_key = os.environ.get("GROQ_API_KEY", "")
+    github_token = os.environ.get("GITHUB_TOKEN", "")
+    github_repo  = os.environ.get("GITHUB_REPOSITORY", "")
+
+    today = datetime.now(timezone.utc)
+    date_dir_name = today.strftime("%m-%d-%Y")
+    tag = today.strftime("%Y-%m-%d")
+
+    root = Path(__file__).parent
+    briefs_dir = root / "briefs"
+    out_dir = briefs_dir / date_dir_name
+    out_dir.mkdir(parents=True, exist_ok=True)
+    md_path  = out_dir / "daily-brief.md"
+    mp3_path = out_dir / "daily-brief.mp3"
+    count_file = briefs_dir / ".issue_count"
+    docs_dir = root / "docs"
+    docs_dir.mkdir(exist_ok=True)
+
+    # 1. Crawl
+    log.info("Crawling sources...")
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        futures = {
+            ex.submit(fetch_hn): "hn",
+            ex.submit(fetch_reddit): "reddit",
+            ex.submit(fetch_github_trending): "github",
+            ex.submit(fetch_rss): "rss",
+        }
+        all_stories: list[Story] = []
+        for future in as_completed(futures):
+            result = future.result()
+            log.info(f"  {futures[future]}: {len(result)} stories")
+            all_stories.extend(result)
+
+    # 2. Rank + deduplicate
+    stories = rank_and_select(deduplicate(all_stories), n=12)
+    log.info(f"Selected {len(stories)} stories after dedup+rank")
+
+    # 3. Summarize
+    if groq_api_key:
+        log.info("Summarizing via Groq...")
+        stories = summarize_and_categorize(stories, api_key=groq_api_key)
+    else:
+        log.warning("GROQ_API_KEY not set — skipping summarization")
+        for s in stories:
+            s.summary = s.text[:300]
+            s.section = _guess_section(s.title, s.text)
+
+    # 4. Format Markdown
+    issue_number = get_next_issue_number(count_file)
+    markdown_text = format_markdown(stories, date=today, issue_number=issue_number)
+    md_path.write_text(markdown_text)
+    log.info(f"Brief written: {md_path}")
+
+    # 5. Generate MP3
+    log.info("Generating MP3 via Kokoro TTS...")
+    tts_ok = generate_mp3(markdown_text, mp3_path)
+
+    # 6. Upload MP3 as GitHub Release
+    mp3_url = ""
+    if tts_ok and github_token and github_repo:
+        title = f"Daily Brief — {today.strftime('%B %-d, %Y')}"
+        try:
+            mp3_url = create_github_release(
+                repo=github_repo, tag=tag, title=title,
+                mp3_path=mp3_path, token=github_token,
+            )
+        except Exception as e:
+            log.warning(f"GitHub Release upload failed: {e}")
+
+    # 7. Regenerate index.html
+    log.info("Regenerating docs/index.html...")
+    all_metas = collect_existing_briefs(briefs_dir, github_repo)
+    index_html = generate_index_html(all_metas)
+    (docs_dir / "index.html").write_text(index_html)
+    log.info("docs/index.html updated")
+
+    log.info("Done.")
+
+
+if __name__ == "__main__":
+    main()
