@@ -76,6 +76,8 @@ def fetch_hn() -> list[Story]:
 
 
 REDDIT_SUBS = [
+    "AI",
+    "Claude",
     "MachineLearning", "LocalLLaMA", "artificial",
     "programming", "Python", "golang", "rust",
 ]
