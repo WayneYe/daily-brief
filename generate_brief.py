@@ -491,7 +491,7 @@ def generate_index_html(briefs: list[BriefMeta]) -> str:
     function updateToggleIcon() {{
       const current = document.documentElement.getAttribute('data-theme');
       const isDark = current === 'dark' || (!current && window.matchMedia('(prefers-color-scheme: dark)').matches);
-      document.getElementById('theme-toggle').textContent = isDark ? '\u2600\ufe0f' : '\ud83c\udf19';
+      document.getElementById('theme-toggle').textContent = isDark ? '\u2600\ufe0f' : '\U0001F319';
     }}
     document.querySelectorAll('.brief-row').forEach(function(row) {{
       row.addEventListener('click', function(e) {{
