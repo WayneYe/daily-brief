@@ -9,7 +9,7 @@ def _make_meta(date_str="2026-04-14", issue=42, word_count=700, mp3_url="https:/
         word_count=word_count,
         mp3_url=mp3_url,
         md_url="https://github.com/blob/main/briefs/04-14-2026/daily-brief.md",
-        html_content="<p>Story content here</p>",
+        raw_md_url="https://raw.githubusercontent.com/WayneYe/daily-brief/master/briefs/04-14-2026/daily-brief.md",
     )
 
 def test_generate_index_html_contains_meta():
@@ -20,6 +20,8 @@ def test_generate_index_html_contains_meta():
     assert "~3 min" in html  # 700 words / 200 wpm = 3
     assert "▶ Play" in html
     assert "📄 Read" in html
+    assert "raw.githubusercontent.com" in html
+    assert "data-raw-url" in html
 
 def test_generate_index_html_no_play_button_when_no_mp3():
     meta = _make_meta(mp3_url="")

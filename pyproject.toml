@@ -10,7 +10,6 @@ dependencies = [
     "kokoro>=0.9",
     "soundfile>=0.12",
     "pydub>=0.25",
-    "markdown>=3.5",
 ]
 
 [project.optional-dependencies]

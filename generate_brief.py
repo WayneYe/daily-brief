@@ -16,7 +16,6 @@ import requests
 import feedparser
 from bs4 import BeautifulSoup
 from groq import Groq
-import markdown as md_lib
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -333,8 +332,8 @@ class BriefMeta:
     issue_number: int
     word_count: int
     mp3_url: str           # empty string if TTS failed
-    md_url: str            # link to raw .md on GitHub
-    html_content: str      # rendered HTML of the brief
+    md_url: str            # GitHub blob URL (for 📄 Read link)
+    raw_md_url: str        # raw.githubusercontent.com URL (for on-demand fetch)
 
 
 def generate_index_html(briefs: list[BriefMeta]) -> str:
@@ -351,7 +350,7 @@ def generate_index_html(briefs: list[BriefMeta]) -> str:
         )
         expanded = "expanded" if i == 0 else ""
         rows.append(f"""
-        <tr class="brief-row {expanded}" data-index="{i}">
+        <tr class="brief-row {expanded}" data-index="{i}" data-raw-url="{b.raw_md_url}">
           <td class="col-date">{date_display}</td>
           <td class="col-issue">#{b.issue_number:03d}</td>
           <td class="col-tags">
@@ -368,7 +367,7 @@ def generate_index_html(briefs: list[BriefMeta]) -> str:
         <tr class="brief-content {expanded}" id="content-{i}">
           <td colspan="5">
             <div class="audio-player" id="audio-{i}"></div>
-            <div class="brief-body">{b.html_content}</div>
+            <div class="brief-body" id="body-{i}">{'<span class="loading">Loading...</span>' if i == 0 else ''}</div>
           </td>
         </tr>""")
 
@@ -379,8 +378,10 @@ def generate_index_html(briefs: list[BriefMeta]) -> str:
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Daily Brief</title>
+  <title>Wayne's Daily Brief Agent</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <style>
+    .loading {{ color: var(--text-muted); font-size: 13px; padding: 16px; display: block; }}
     :root {{
       --bg: #ffffff; --bg2: #f6f8fa; --border: #d0d7de; --text: #1f2328;
       --text-muted: #636c76; --accent: #0969da;
@@ -493,6 +494,22 @@ def generate_index_html(briefs: list[BriefMeta]) -> str:
       const isDark = current === 'dark' || (!current && window.matchMedia('(prefers-color-scheme: dark)').matches);
       document.getElementById('theme-toggle').textContent = isDark ? '\u2600\ufe0f' : '\U0001F319';
     }}
+    function loadBriefContent(row) {{
+      const idx = row.dataset.index;
+      const rawUrl = row.dataset.rawUrl;
+      const body = document.getElementById('body-' + idx);
+      if (!body || body.dataset.loaded) return;
+      body.innerHTML = '<span class="loading">Loading...</span>';
+      fetch(rawUrl)
+        .then(function(r) {{ return r.text(); }})
+        .then(function(md) {{
+          body.innerHTML = marked.parse(md);
+          body.dataset.loaded = '1';
+        }})
+        .catch(function() {{
+          body.innerHTML = '<span class="loading">Failed to load content.</span>';
+        }});
+    }}
     document.querySelectorAll('.brief-row').forEach(function(row) {{
       row.addEventListener('click', function(e) {{
         if (e.target.tagName === 'A' || e.target.tagName === 'BUTTON') return;
@@ -501,9 +518,16 @@ def generate_index_html(briefs: list[BriefMeta]) -> str:
         const isExpanded = content.classList.contains('expanded');
         document.querySelectorAll('.brief-content').forEach(function(c) {{ c.classList.remove('expanded'); }});
         document.querySelectorAll('.brief-row').forEach(function(r) {{ r.classList.remove('expanded'); }});
-        if (!isExpanded) {{ content.classList.add('expanded'); this.classList.add('expanded'); }}
+        if (!isExpanded) {{
+          content.classList.add('expanded');
+          this.classList.add('expanded');
+          loadBriefContent(this);
+        }}
       }});
     }});
+    // Load the first (expanded) row on page load
+    var firstRow = document.querySelector('.brief-row.expanded');
+    if (firstRow) loadBriefContent(firstRow);
     let currentAudio = null;
     function toggleAudio(btn, url) {{
       if (currentAudio && !currentAudio.paused) {{
@@ -639,8 +663,8 @@ def collect_existing_briefs(briefs_dir: Path, repo: str) -> list[BriefMeta]:
         word_count = len(content.split())
         tag = date.strftime("%Y-%m-%d")
         md_url = f"https://github.com/{repo}/blob/main/briefs/{date_str}/daily-brief.md"
+        raw_md_url = f"https://raw.githubusercontent.com/{repo}/master/briefs/{date_str}/daily-brief.md"
         mp3_url = f"https://github.com/{repo}/releases/download/{tag}/daily-brief.mp3"
-        html_content = md_lib.markdown(content)
         metas.append(BriefMeta(
             date=date,
             date_str=date_str,
@@ -648,7 +672,7 @@ def collect_existing_briefs(briefs_dir: Path, repo: str) -> list[BriefMeta]:
             word_count=word_count,
             mp3_url=mp3_url,
             md_url=md_url,
-            html_content=html_content,
+            raw_md_url=raw_md_url,
         ))
     return metas
 
