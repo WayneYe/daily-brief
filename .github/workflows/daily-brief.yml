@@ -39,11 +39,10 @@ jobs:
       - name: Generate daily brief
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: uv run python generate_brief.py
 
-      - name: Commit and push brief + index.html
+      - name: Commit and push brief + audio + index.html
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

@@ -620,47 +620,6 @@ def generate_mp3(markdown_text: str, output_path: Path) -> bool:
         return False
 
 
-def create_github_release(
-    repo: str,
-    tag: str,
-    title: str,
-    mp3_path: Path,
-    token: str,
-) -> str:
-    """Create a GitHub Release and upload the MP3. Returns the asset download URL."""
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-    }
-    release_resp = requests.post(
-        f"https://api.github.com/repos/{repo}/releases",
-        headers=headers,
-        json={
-            "tag_name": tag,
-            "name": title,
-            "body": f"Automated daily brief for {tag}.",
-            "draft": False,
-            "prerelease": False,
-        },
-        timeout=15,
-    )
-    release_resp.raise_for_status()
-    upload_url = release_resp.json()["upload_url"].replace("{?name,label}", "")
-
-    with open(mp3_path, "rb") as f:
-        upload_resp = requests.post(
-            upload_url,
-            headers={**headers, "Content-Type": "audio/mpeg"},
-            params={"name": "daily-brief.mp3"},
-            data=f,
-            timeout=120,
-        )
-    upload_resp.raise_for_status()
-    asset_url = upload_resp.json()["browser_download_url"]
-    log.info(f"MP3 uploaded to GitHub Release: {asset_url}")
-    return asset_url
-
 
 def collect_existing_briefs(briefs_dir: Path, repo: str) -> list[BriefMeta]:
     """Walk briefs/*/daily-brief.md and reconstruct BriefMeta for each."""
@@ -677,8 +636,8 @@ def collect_existing_briefs(briefs_dir: Path, repo: str) -> list[BriefMeta]:
         word_count = len(content.split())
         md_url = f"https://github.com/{repo}/blob/master/briefs/{date_str}/daily-brief.md"
         raw_md_url = f"https://raw.githubusercontent.com/{repo}/master/briefs/{date_str}/daily-brief.md"
-        mp3_url_file = md_path.parent / ".mp3_url"
-        mp3_url = mp3_url_file.read_text().strip() if mp3_url_file.exists() else ""
+        mp3_exists = (md_path.parent / "daily-brief.mp3").exists()
+        mp3_url = f"briefs/{date_str}/daily-brief.mp3" if mp3_exists else ""
         metas.append(BriefMeta(
             date=date,
             date_str=date_str,
@@ -748,19 +707,11 @@ def main():
     log.info("Generating MP3 via Kokoro TTS...")
     tts_ok = generate_mp3(markdown_text, mp3_path)
 
-    # 6. Upload MP3 as GitHub Release
-    mp3_url = ""
-    if tts_ok and github_token and github_repo:
-        title = f"Daily Brief — {today.strftime('%B %-d, %Y')}"
-        try:
-            mp3_url = create_github_release(
-                repo=github_repo, tag=tag, title=title,
-                mp3_path=mp3_path, token=github_token,
-            )
-        except Exception as e:
-            log.warning(f"GitHub Release upload failed: {e}")
-    # Persist the mp3 URL (or empty) so collect_existing_briefs can read it back
-    (out_dir / ".mp3_url").write_text(mp3_url)
+    # 6. MP3 is committed to the repo and served via GitHub Pages (same-origin, no CORS issues)
+    if tts_ok:
+        log.info(f"MP3 ready: {mp3_path}")
+    else:
+        log.warning("TTS failed — no audio for this brief")
 
     # 7. Regenerate index.html
     log.info("Regenerating docs/index.html...")

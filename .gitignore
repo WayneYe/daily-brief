@@ -1,9 +1,9 @@
+.DS_Store
 __pycache__/
 *.pyc
 .venv/
 uv.lock
 *.wav
-*.mp3
 .env
 .pytest_cache/
 *.egg-info/
