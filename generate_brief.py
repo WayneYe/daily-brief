@@ -661,10 +661,10 @@ def collect_existing_briefs(briefs_dir: Path, repo: str) -> list[BriefMeta]:
         m = re.search(r"Issue #(\d+)", content)
         issue = int(m.group(1)) if m else 0
         word_count = len(content.split())
-        tag = date.strftime("%Y-%m-%d")
         md_url = f"https://github.com/{repo}/blob/master/briefs/{date_str}/daily-brief.md"
         raw_md_url = f"https://raw.githubusercontent.com/{repo}/master/briefs/{date_str}/daily-brief.md"
-        mp3_url = f"https://github.com/{repo}/releases/download/{tag}/daily-brief.mp3"
+        mp3_url_file = md_path.parent / ".mp3_url"
+        mp3_url = mp3_url_file.read_text().strip() if mp3_url_file.exists() else ""
         metas.append(BriefMeta(
             date=date,
             date_str=date_str,
@@ -746,6 +746,8 @@ def main():
             )
         except Exception as e:
             log.warning(f"GitHub Release upload failed: {e}")
+    # Persist the mp3 URL (or empty) so collect_existing_briefs can read it back
+    (out_dir / ".mp3_url").write_text(mp3_url)
 
     # 7. Regenerate index.html
     log.info("Regenerating docs/index.html...")
