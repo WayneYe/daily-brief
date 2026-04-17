@@ -151,10 +151,25 @@ def fetch_github_trending() -> list[Story]:
 
 
 RSS_FEEDS = [
+    # AI / LLM / Agents
     "https://techcrunch.com/category/artificial-intelligence/feed/",
-    "https://feeds.arstechnica.com/arstechnica/technology-lab",
     "https://www.theregister.com/software/ai_ml/headlines.atom",
+    "https://blogs.microsoft.com/ai/feed/",
+    "https://huggingface.co/blog/feed.xml",
+    "https://simonwillison.net/atom/entries/",
+    "https://venturebeat.com/category/ai/feed/",
+    "https://bdtechtalks.com/feed/",
+    # Programming languages / dev tools
+    "https://feeds.arstechnica.com/arstechnica/technology-lab",
     "https://www.infoq.com/feed/",
+    "https://thenewstack.io/feed/",
+    "https://engineering.fb.com/feed/",
+    "https://developers.googleblog.com/feeds/posts/default",
+    "https://devblogs.microsoft.com/python/feed/",
+    # General tech / software
+    "https://feeds.feedburner.com/ThePragmaticEngineer",
+    "https://www.theverge.com/rss/index.xml",
+    "https://spectrum.ieee.org/feeds/topic/artificial-intelligence.rss",
 ]
 
 
@@ -698,10 +713,9 @@ def main():
 
     # 1. Crawl
     log.info("Crawling sources...")
-    with ThreadPoolExecutor(max_workers=4) as ex:
+    with ThreadPoolExecutor(max_workers=3) as ex:
         futures = {
             ex.submit(fetch_hn): "hn",
-            ex.submit(fetch_reddit): "reddit",
             ex.submit(fetch_github_trending): "github",
             ex.submit(fetch_rss): "rss",
         }
