@@ -634,8 +634,8 @@ def collect_existing_briefs(briefs_dir: Path, repo: str) -> list[BriefMeta]:
         m = re.search(r"Issue #(\d+)", content)
         issue = int(m.group(1)) if m else 0
         word_count = len(content.split())
-        md_url = f"https://github.com/{repo}/blob/master/briefs/{date_str}/daily-brief.md"
-        raw_md_url = f"https://raw.githubusercontent.com/{repo}/master/briefs/{date_str}/daily-brief.md"
+        md_url = f"https://github.com/{repo}/blob/master/docs/briefs/{date_str}/daily-brief.md"
+        raw_md_url = f"https://raw.githubusercontent.com/{repo}/master/docs/briefs/{date_str}/daily-brief.md"
         mp3_exists = (md_path.parent / "daily-brief.mp3").exists()
         mp3_url = f"briefs/{date_str}/daily-brief.mp3" if mp3_exists else ""
         metas.append(BriefMeta(
@@ -660,14 +660,14 @@ def main():
     tag = today.strftime("%Y-%m-%d")
 
     root = Path(__file__).parent
-    briefs_dir = root / "briefs"
+    docs_dir = root / "docs"
+    docs_dir.mkdir(exist_ok=True)
+    briefs_dir = docs_dir / "briefs"
     out_dir = briefs_dir / date_dir_name
     out_dir.mkdir(parents=True, exist_ok=True)
     md_path  = out_dir / "daily-brief.md"
     mp3_path = out_dir / "daily-brief.mp3"
     count_file = briefs_dir / ".issue_count"
-    docs_dir = root / "docs"
-    docs_dir.mkdir(exist_ok=True)
 
     # 1. Crawl
     log.info("Crawling sources...")
