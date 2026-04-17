@@ -543,34 +543,33 @@ def generate_index_html(briefs: list[BriefMeta]) -> str:
     // Load the first (expanded) row on page load
     var firstRow = document.querySelector('.brief-row.expanded');
     if (firstRow) loadBriefContent(firstRow);
-    let currentAudio = null;
     function toggleAudio(btn, url) {{
-      if (currentAudio && !currentAudio.paused) {{
-        currentAudio.pause();
-        if (currentAudio.dataset.url === url) {{ currentAudio = null; btn.textContent = '\\u25b6 Play'; return; }}
-      }}
       const row = btn.closest('tr');
       const idx = row.dataset.index;
       const container = document.getElementById('content-' + idx);
       const audioDiv = document.getElementById('audio-' + idx);
+      // Expand the row if not already open
       if (!container.classList.contains('expanded')) {{
         document.querySelectorAll('.brief-content').forEach(function(c) {{ c.classList.remove('expanded'); }});
         document.querySelectorAll('.brief-row').forEach(function(r) {{ r.classList.remove('expanded'); }});
         container.classList.add('expanded');
         row.classList.add('expanded');
+        loadBriefContent(row);
       }}
-      let audio = audioDiv.querySelector('audio');
-      if (!audio) {{
-        audio = document.createElement('audio');
+      // Inject native audio player once; hide the Play button
+      if (!audioDiv.querySelector('audio')) {{
+        var audio = document.createElement('audio');
         audio.controls = true;
+        audio.preload = 'none';
         audio.src = url;
-        audio.dataset.url = url;
+        audio.style.width = '100%';
+        audio.style.maxWidth = '480px';
+        audio.onerror = function() {{
+          audioDiv.innerHTML = '<span style="color:red;font-size:13px">Audio unavailable</span>';
+        }};
         audioDiv.appendChild(audio);
       }}
-      audio.play();
-      currentAudio = audio;
-      btn.textContent = '\u23f8 Pause';
-      audio.onended = function() {{ btn.textContent = '\\u25b6 Play'; }};
+      btn.style.display = 'none';
     }}
   </script>
 </body>
