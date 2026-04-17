@@ -8,7 +8,7 @@ def _make_meta(date_str="2026-04-14", issue=42, word_count=700, mp3_url="https:/
         issue_number=issue,
         word_count=word_count,
         mp3_url=mp3_url,
-        md_url="https://github.com/blob/main/briefs/04-14-2026/daily-brief.md",
+        md_url="https://github.com/blob/master/briefs/04-14-2026/daily-brief.md",
         raw_md_url="https://raw.githubusercontent.com/WayneYe/daily-brief/master/briefs/04-14-2026/daily-brief.md",
     )
 

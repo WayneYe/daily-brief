@@ -662,7 +662,7 @@ def collect_existing_briefs(briefs_dir: Path, repo: str) -> list[BriefMeta]:
         issue = int(m.group(1)) if m else 0
         word_count = len(content.split())
         tag = date.strftime("%Y-%m-%d")
-        md_url = f"https://github.com/{repo}/blob/main/briefs/{date_str}/daily-brief.md"
+        md_url = f"https://github.com/{repo}/blob/master/briefs/{date_str}/daily-brief.md"
         raw_md_url = f"https://raw.githubusercontent.com/{repo}/master/briefs/{date_str}/daily-brief.md"
         mp3_url = f"https://github.com/{repo}/releases/download/{tag}/daily-brief.mp3"
         metas.append(BriefMeta(
