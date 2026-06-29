@@ -2,7 +2,7 @@ name: Daily Brief
 
 on:
   schedule:
-    - cron: '0 6 * * *'
+    - cron: '0 6 * * 0' # Every Sunday 6 UTC
   workflow_dispatch:
 
 permissions:
