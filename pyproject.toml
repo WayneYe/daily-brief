@@ -10,6 +10,7 @@ dependencies = [
     "kokoro>=0.9",
     "soundfile>=0.12",
     "pydub>=0.25",
+    "ipython>=9.16.1",
 ]
 
 [project.optional-dependencies]
@@ -21,6 +22,10 @@ dev = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[[tool.uv.index]]
+url = "https://artifact.intuit.com/artifactory/api/pypi/pypi-intuit/simple"
+default = true
 
 [tool.hatch.build]
 skip-excluded-dirs = true
