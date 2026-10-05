@@ -1,0 +1,14 @@
+.git
+.github
+.claude
+docs
+briefs
+implementation-spec
+tests
+**/__pycache__
+.venv
+*.md
+!README.md
+.env
+*.mp3
+*.wav
