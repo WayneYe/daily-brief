@@ -13,7 +13,7 @@ jobs:
   generate:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/${{ github.repository }}:latest
+      image: ghcr.io/wayneye/daily-brief:latest
 
     steps:
       - name: Checkout
